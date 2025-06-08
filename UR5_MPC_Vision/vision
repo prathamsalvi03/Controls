@@ -1,0 +1,103 @@
+import cv2
+import numpy as np
+
+# === Constants ===
+KNOWN_WIDTH = 20.0  # cm, real-world width of the object
+KNOWN_DISTANCE = 100.0  # cm, known distance for calibration
+cx, cy = 320, 240       # optical center
+fx, fy = 800, 800       # initial guess for focal lengths
+FOCAL_LENGTH = None     # Will be computed
+
+# === Helper Functions ===
+def calculate_focal_length(known_distance, known_width, pixel_width):
+    return (pixel_width * known_distance) / known_width
+
+def calculate_distance(focal_length, known_width, pixel_width):
+    return (known_width * focal_length) / pixel_width
+
+def calculate_3d_coordinates(u, v, depth_cm):
+    # Convert depth from cm to m and pixel displacement to meters using fx, fy
+    x = (u - cx) * depth_cm / fx
+    y = (v - cy) * depth_cm / fy
+    z = depth_cm
+    return x / 100, y / 100, z / 100  # convert to meters
+
+def measure_pixel_width_with_bounding_box(frame, lower_hsv, upper_hsv):
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    mask = cv2.inRange(hsv, lower_hsv, upper_hsv)
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    if contours:
+        c = max(contours, key=cv2.contourArea)
+        x, y, w, h = cv2.boundingRect(c)
+        return w, (x, y, w, h)
+    
+    return None, None
+
+# === Main Function ===
+def main():
+    global FOCAL_LENGTH
+    cap = cv2.VideoCapture(0)
+
+    # Example HSV range for red object
+    lower_hsv = np.array([0, 120, 70])
+    upper_hsv = np.array([10, 255, 255])
+
+    print("Starting Calibration...")
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            print("Failed to capture image.")
+            break
+
+        pixel_width, bounding_box = measure_pixel_width_with_bounding_box(frame, lower_hsv, upper_hsv)
+        if pixel_width:
+            FOCAL_LENGTH = calculate_focal_length(KNOWN_DISTANCE, KNOWN_WIDTH, pixel_width)
+            print(f"Pixel Width: {pixel_width}px -> Focal Length: {FOCAL_LENGTH:.2f} px")
+
+            if bounding_box:
+                x, y, w, h = bounding_box
+                cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+                cv2.putText(frame, "Calibrating...", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+
+            cv2.imshow("Calibration", frame)
+            cv2.waitKey(2000)  # Show for 2 seconds
+            break
+
+        cv2.imshow("Calibration", frame)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    print("Starting Depth and 3D Estimation...")
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        pixel_width, bounding_box = measure_pixel_width_with_bounding_box(frame, lower_hsv, upper_hsv)
+        if pixel_width:
+            depth = calculate_distance(FOCAL_LENGTH, KNOWN_WIDTH, pixel_width)
+            x, y, w, h = bounding_box
+            u, v = x + w // 2, y + h // 2  # Center of the bounding box
+
+            X_3d, Y_3d, Z_3d = calculate_3d_coordinates(u, v, depth)
+            print(f"3D Coordinates: X = {X_3d:.2f} m, Y = {Y_3d:.2f} m, Z = {Z_3d:.2f} m")
+
+            # Save 3D coordinates for IK
+            np.save("target_position.npy", np.array([X_3d, Y_3d, Z_3d]))
+
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (255, 0, 0), 2)
+            cv2.putText(frame, f"Distance: {depth:.2f} cm", (x, y - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
+            cv2.putText(frame, f"3D: ({X_3d:.2f}, {Y_3d:.2f}, {Z_3d:.2f})", (x, y - 30),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
+
+        cv2.imshow("Depth and 3D Estimation", frame)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+if __name__ == "__main__":
+    main()
