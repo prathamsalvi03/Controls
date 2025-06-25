@@ -42,18 +42,19 @@ UR5_MPC_Vision/
 
 ---
 
+
 ## 🛠️ Setup Instructions
 
 1. **Clone this repo**  
-
+   ```bash
    git clone https://github.com/prathamsalvi03/Controls.git
    cd Controls/UR5_MPC_Vision
-  
+   ```
 
 2. **Install dependencies**  
-
+   ```bash
    pip install numpy opencv-python pybullet pinocchio cvxpy matplotlib
- 
+   ```
 
 3. **Download UR5 URDF**  
    Ensure the UR5 robot description is available at the correct path (update `urdf_path` variables as needed).
@@ -65,22 +66,22 @@ UR5_MPC_Vision/
 Execute the modules in sequence:
 
 1. **Detect & save 3D position**  
-   
+   ```bash
    python3 Vision_code.py
- 
+   ```
 
 2. **Solve IK and save joint configuration**  
-   
+   ```bash
    python3 ik_solver.py
-  
+   ```
 
 3. **Smooth joint trajectories with MPC**  
-  
+   ```bash
    python3 MPC.py
    ```
 
 4. **Visualize UR5 motion in PyBullet**  
-   
+   ```bash
    python3 pybullet_visualizer.py
    ```
 
